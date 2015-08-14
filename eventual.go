@@ -88,6 +88,8 @@ type eventInstance struct {
 	mandatory bool
 	exclusive bool
 	subs      []chan IEvent
+
+	lock sync.Mutex
 }
 
 type eventualInstance struct {
@@ -117,6 +119,9 @@ func (e *eventInstance) Pub(ei IEvent) {
 
 // Sub implementation of the Subscriber interface
 func (e *eventInstance) Sub() <-chan IEvent {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
 	if e.IsExclusive() && len(e.subs) > 0 {
 		panic(fmt.Errorf("this is a exclusive event, and there is already a subscriber available"))
 	}
@@ -159,7 +164,7 @@ func (e *eventualInstance) Register(topic string, mandatory, exclusive bool) (Ev
 			return nil, err
 		}
 	} else {
-		event = &eventInstance{topic, mandatory, exclusive, nil}
+		event = &eventInstance{topic, mandatory, exclusive, nil, sync.Mutex{}}
 		e.list[topic] = event
 	}
 
