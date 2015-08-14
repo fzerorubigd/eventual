@@ -14,9 +14,9 @@ one.
 There is some definition :
 
 - Mandatory means publish is not finished unless all subscribers receive the message, in this case, the receiver must always read the channel. TODO : a way to unsub
-- Exclusive means there is only and only one receiver for a topic is
+- Exclusive means there is only and only one receiver for a topic is available
 
-### available
+## Sample code
 
     package main
 
