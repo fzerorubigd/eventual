@@ -89,32 +89,48 @@ type eventInstance struct {
 	exclusive bool
 	subs      []chan IEvent
 
-	lock sync.Mutex
+	lock *sync.RWMutex
 }
 
 type eventualInstance struct {
 	list map[string]Event
-	lock sync.Mutex
+	lock *sync.Mutex
 }
 
 func (e *eventInstance) Pub(ei IEvent) {
+	if e.mandatory {
+		e.pubMandatory(ei)
+	} else {
+		e.pubNormal(ei)
+	}
+}
+
+func (e *eventInstance) pubMandatory(ei IEvent) {
 	wg := sync.WaitGroup{}
+
 	wg.Add(len(e.subs))
 	for i := range e.subs {
 		go func(c chan IEvent) {
+			e.lock.RLock()
+			defer e.lock.RUnlock()
 			defer wg.Done()
-			if e.mandatory {
-				c <- ei
-			} else {
-				select {
-				case c <- ei:
-				default:
-				}
-			}
+			c <- ei
 		}(e.subs[i])
 	}
 	// In mandatory, its blocked until all data are recieved
 	wg.Wait()
+}
+
+func (e *eventInstance) pubNormal(ei IEvent) {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
+
+	for i := range e.subs {
+		select {
+		case e.subs[i] <- ei:
+		default:
+		}
+	}
 }
 
 // Sub implementation of the Subscriber interface
@@ -151,6 +167,7 @@ func (e *eventInstance) GetTopic() string {
 func (e *eventualInstance) Register(topic string, mandatory, exclusive bool) (Event, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
+
 	event, ok := e.list[topic]
 	if ok {
 		if event.IsMandatory() != mandatory || event.IsExclusive() != exclusive {
@@ -164,7 +181,7 @@ func (e *eventualInstance) Register(topic string, mandatory, exclusive bool) (Ev
 			return nil, err
 		}
 	} else {
-		event = &eventInstance{topic, mandatory, exclusive, nil, sync.Mutex{}}
+		event = &eventInstance{topic, mandatory, exclusive, nil, &sync.RWMutex{}}
 		e.list[topic] = event
 	}
 
@@ -173,5 +190,5 @@ func (e *eventualInstance) Register(topic string, mandatory, exclusive bool) (Ev
 
 // New return an eventual structure
 func New() Eventual {
-	return &eventualInstance{make(map[string]Event), sync.Mutex{}}
+	return &eventualInstance{make(map[string]Event), &sync.Mutex{}}
 }
